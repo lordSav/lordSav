@@ -1,0 +1,179 @@
+from msilib.schema import IniFile
+import os
+
+
+CREATE_BOOK_CHOICE = 1
+DISPLAY_BOOK_CHOICE = 2
+ADD_BOOK_CHOICE = 3
+SEARCH_BOOK_CHOICE = 4
+QUANTITY_BOOK_CHOICE = 5
+DELETE_BOOK_CHOICE = 6
+QUIT_CHOICE = 7
+
+def main():
+
+    choice = 0
+    #good and works
+    display_menu()
+    while (choice != QUIT_CHOICE):
+        choice = int(input("Enter a choice please: "))
+        if choice == CREATE_BOOK_CHOICE:
+            #good and works
+            create_Books()
+        elif choice == DISPLAY_BOOK_CHOICE:
+            display_Books()
+        elif choice == ADD_BOOK_CHOICE:
+            add_Books()
+        elif choice == SEARCH_BOOK_CHOICE:
+            search_Books()
+        elif choice == QUANTITY_BOOK_CHOICE:
+            change_Quaunity()
+        elif choice == DELETE_BOOK_CHOICE:
+            delete_book()
+        elif choice == QUIT_CHOICE:
+            print("Leaving program")
+        else:
+            print("Invaid option")
+
+def display_menu():
+    print("  Welcome To Corry's Bookstore!    ")
+    print("-----------------------------------")
+    print("1) Create book list")
+    print("2) Display all Books")
+    print("3) Add a New Book")
+    print("4) Search for A Book")
+    print("5) Change the Quantity of a Book")
+    print("6) Delete A book")
+    print("7) Quit the Program")
+
+
+def create_Books():
+
+    another = "y"
+    
+    outfile = open("books.txt", "w")
+    
+    while another == 'y' or another == "Y":
+        book_input = input("Enter the name of the Book: ")
+        price_input = float(input("How much is the price of the book: "))
+        quantity_input = int(input("How many books are you buying?: "))
+
+        outfile.write(f"{book_input}\n")
+        outfile.write(f"{price_input:.02f}\n")
+        outfile.write(f"{quantity_input}\n")
+        print("Would you like to add another book? if so")
+        another = input("enter Y or y if not hit N: ")
+    
+    outfile.close()
+    display_menu()
+
+def display_Books():
+    #needs work
+    outfile = open("booklist.txt" , "r")
+
+    title = outfile.readline().rstrip('\n')
+    quantity = outfile.readline().rstrip('\n')
+    price = outfile.readline().rstrip('\n')
+
+    line_contents = outfile.readlines()
+    while line_contents != " ":
+        print(title)
+        print(quantity)
+        print(price)
+        line_contents = outfile.readline()
+
+def add_Books():
+    outfile = open("books.txt", "a")
+
+    while another == 'y' or another == "Y":
+        book_input = input("Enter the name of the Book you would like to add?: ")
+        price_input = float(input("How much is the price of the book your adding?: "))
+        quantity_input = int(input("How many books are you buying?: "))
+
+        outfile.write(f"{book_input}\n")
+        outfile.write(f"{price_input:.02f}\n")
+        outfile.write(f"{quantity_input}\n")
+        print("Would you like to add another book? if so")
+        another = input("enter Y or y if not hit N: ")
+    
+    outfile.close()
+    display_menu()
+
+def search_Books():
+    found = False    
+    search = input("Enter your book name: ")
+    outfile = open("books.txt","r")
+
+    title = outfile.readline()
+    
+    while title != " ":
+        title = title.rstrip('\n')
+        quan = int(outfile.readline())
+        price = float(outfile.readline())
+
+        if (title == search) :
+            print(f'Title: {title}')
+            print(f'Quantity: {quan}')
+            print(f"Price: {price:.2f}")
+            found = True
+    
+    title = outfile.readline()
+
+    outfile.close()
+    if not found:
+         print("We coulnd't find the book you were looking for ")
+    display_menu()
+
+
+def change_Quaunity():
+    found = False
+
+    search = input("Enter the book your looking for: ")
+    new_quantity = int(input("enter the new price: "))
+
+    infile = open('book.txt', "r")
+    temp_file = open("temp.txt","w") 
+
+    while title != " ":
+        title = title.rstrip('\n')
+        quantity = int(infile.readline())
+        price = float(infile.readline())
+        
+        if (title == search):
+            found = True
+            temp_file.write(f'{title}\n')
+            temp_file.write(f'{new_quantity}\n')
+            temp_file.write(f'{price}\n')
+        else:
+            temp_file.write(f'{title}\n')
+            temp_file.write(f'{quantity}\n')
+            temp_file.write(f'{price}\n')
+
+    if not found:
+        print("This book isn't in the file")
+    title = infile.readline()
+        
+    infile.close()
+    temp_file.close()
+    os.remove('books.txt')
+    os.remname("temp.txt","books.txt")
+
+def delete_book():
+
+    ##needs work
+    found = False
+    search = input("Enter the book your looking for: ")
+
+    
+    outfile = open('books.txt', "r")
+    stored_data = outfile.readlines("\n")
+    new_file = open("books.txt","w") 
+
+   
+
+    outfile.close()
+    new_file.close()
+
+
+if __name__ == "__main__":
+    main()
