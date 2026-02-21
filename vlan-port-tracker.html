@@ -852,12 +852,30 @@ function renderSwitches() {
     }
 
     // Render ports in switch-panel style: top row = odd, bottom row = even
-    const oddPorts = sw.ports.filter(p => p.number % 2 === 1);
-    const evenPorts = sw.ports.filter(p => p.number % 2 === 0);
-
+    // For 48-port switches, split into two banks of 24 (like a real switch)
     html += '<div class="port-grid">';
-    html += renderPortRow(sw, oddPorts, inBulk, bm);
-    html += renderPortRow(sw, evenPorts, inBulk, bm);
+
+    if (sw.portCount === 48) {
+      const bank1 = sw.ports.filter(p => p.number <= 24);
+      const bank2 = sw.ports.filter(p => p.number > 24);
+
+      const bank1Odd = bank1.filter(p => p.number % 2 === 1);
+      const bank1Even = bank1.filter(p => p.number % 2 === 0);
+      const bank2Odd = bank2.filter(p => p.number % 2 === 1);
+      const bank2Even = bank2.filter(p => p.number % 2 === 0);
+
+      html += renderPortRow(sw, bank1Odd, inBulk, bm);
+      html += renderPortRow(sw, bank1Even, inBulk, bm);
+      html += '<div style="height:10px;"></div>';
+      html += renderPortRow(sw, bank2Odd, inBulk, bm);
+      html += renderPortRow(sw, bank2Even, inBulk, bm);
+    } else {
+      const oddPorts = sw.ports.filter(p => p.number % 2 === 1);
+      const evenPorts = sw.ports.filter(p => p.number % 2 === 0);
+      html += renderPortRow(sw, oddPorts, inBulk, bm);
+      html += renderPortRow(sw, evenPorts, inBulk, bm);
+    }
+
     html += '</div>';
 
     html += `</div></div>`;
