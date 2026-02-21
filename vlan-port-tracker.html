@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VLAN Port Tracker</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #0f3460;
+    --text: #e0e0e0;
+    --text-muted: #8a8a9a;
+    --border: #2a2a4a;
+    --accent: #e94560;
+    --accent-hover: #ff6b81;
+    --unassigned: #3a3a5a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  header h1 span { color: var(--accent); }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  button {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.15s;
+  }
+
+  button:hover { background: #1a4a80; border-color: #3a5a8a; }
+  button.primary { background: var(--accent); border-color: var(--accent); }
+  button.primary:hover { background: var(--accent-hover); }
+  button.danger { border-color: #a03030; color: #ff6b6b; }
+  button.danger:hover { background: #401515; }
+
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  /* ---- VLAN Legend ---- */
+  .vlan-legend {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+  }
+
+  .vlan-legend h2 {
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  .vlan-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .vlan-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    border: 2px solid transparent;
+    cursor: default;
+    position: relative;
+  }
+
+  .vlan-chip .swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .vlan-chip .remove-vlan {
+    margin-left: 4px;
+    cursor: pointer;
+    opacity: 0.5;
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .vlan-chip .remove-vlan:hover { opacity: 1; color: #ff6b6b; }
+
+  .unassigned-chip {
+    background: var(--unassigned);
+    color: var(--text-muted);
+  }
+
+  .unassigned-chip .swatch { background: var(--unassigned); border: 1px dashed var(--text-muted); }
+
+  /* ---- Switch Card ---- */
+  .switch-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  .switch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .switch-header h3 {
+    font-size: 1.05rem;
+    font-weight: 600;
+  }
+
+  .switch-header h3 .port-count {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-left: 8px;
+  }
+
+  .switch-header-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .switch-body { padding: 20px; }
+
+  /* Port grid: top row = odd ports, bottom row = even ports (standard switch layout) */
+  .port-grid {
+    display: grid;
+    gap: 6px;
+  }
+
+  .port-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .port-block {
+    width: 52px;
+    height: 48px;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.15s;
+    position: relative;
+    font-size: 0.72rem;
+  }
+
+  .port-block:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 2;
+  }
+
+  .port-block.unassigned {
+    background: var(--unassigned);
+    border-color: #4a4a6a;
+  }
+
+  .port-number {
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+
+  .port-vlan-label {
+    font-size: 0.65rem;
+    opacity: 0.8;
+    margin-top: 1px;
+    max-width: 46px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ---- Modals ---- */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    min-width: 340px;
+    max-width: 460px;
+    width: 90%;
+  }
+
+  .modal h2 {
+    margin-bottom: 18px;
+    font-size: 1.15rem;
+  }
+
+  .form-group {
+    margin-bottom: 14px;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .form-group input,
+  .form-group select {
+    width: 100%;
+    padding: 9px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.9rem;
+  }
+
+  .form-group input:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .form-group input[type="color"] {
+    height: 42px;
+    padding: 4px;
+    cursor: pointer;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+  }
+
+  /* Port assignment modal - VLAN picker */
+  .vlan-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .vlan-pick-option {
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+
+  .vlan-pick-option:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+
+  .vlan-pick-option.selected {
+    border-color: #fff;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.3);
+  }
+
+  /* Bulk assign toolbar */
+  .bulk-bar {
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 12px;
+    display: none;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+  }
+
+  .bulk-bar.active { display: flex; }
+
+  /* ---- Data management ---- */
+  .data-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .port-block { width: 44px; height: 42px; }
+    .port-number { font-size: 0.75rem; }
+    .container { padding: 12px; }
+  }
+
+  /* Toast notification */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 0.85rem;
+    z-index: 200;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s;
+    pointer-events: none;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Editable switch name */
+  .switch-name-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed var(--text-muted);
+    color: var(--text);
+    font-size: 1.05rem;
+    font-weight: 600;
+    font-family: inherit;
+    width: 200px;
+    padding: 2px 4px;
+  }
+  .switch-name-input:focus { outline: none; border-bottom-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>VLAN</span> Port Tracker</h1>
+  <div class="header-actions">
+    <button onclick="openAddVlanModal()">+ VLAN</button>
+    <button onclick="openAddSwitchModal()">+ Switch</button>
+    <button onclick="exportData()">Export</button>
+    <button onclick="document.getElementById('importFile').click()">Import</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+  </div>
+</header>
+
+<div class="container">
+  <div class="vlan-legend" id="vlanLegend"></div>
+  <div id="switchContainer"></div>
+</div>
+
+<!-- Add VLAN Modal -->
+<div class="modal-overlay" id="addVlanModal">
+  <div class="modal">
+    <h2 id="vlanModalTitle">Add VLAN</h2>
+    <div class="form-group">
+      <label>VLAN ID</label>
+      <input type="number" id="vlanId" min="1" max="4094" placeholder="e.g. 10">
+    </div>
+    <div class="form-group">
+      <label>Name</label>
+      <input type="text" id="vlanName" placeholder="e.g. Management">
+    </div>
+    <div class="form-group">
+      <label>Color</label>
+      <input type="color" id="vlanColor" value="#e94560">
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal('addVlanModal')">Cancel</button>
+      <button class="primary" onclick="saveVlan()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Switch Modal -->
+<div class="modal-overlay" id="addSwitchModal">
+  <div class="modal">
+    <h2>Add Switch</h2>
+    <div class="form-group">
+      <label>Switch Name</label>
+      <input type="text" id="switchName" placeholder="e.g. Core-SW-01">
+    </div>
+    <div class="form-group">
+      <label>Port Count</label>
+      <select id="switchPortCount">
+        <option value="8">8 Ports</option>
+        <option value="12">12 Ports</option>
+        <option value="16">16 Ports</option>
+        <option value="24" selected>24 Ports</option>
+        <option value="48">48 Ports</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal('addSwitchModal')">Cancel</button>
+      <button class="primary" onclick="addSwitch()">Add Switch</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign VLAN to Port Modal -->
+<div class="modal-overlay" id="assignVlanModal">
+  <div class="modal">
+    <h2 id="assignTitle">Assign VLAN - Port 1</h2>
+    <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Select a VLAN to assign to this port:</p>
+    <div class="vlan-picker" id="vlanPicker"></div>
+    <div class="form-group" style="margin-top:14px;">
+      <label>Port Note (optional)</label>
+      <input type="text" id="portNote" placeholder="e.g. AP-Floor2, Server-DB01">
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal('assignVlanModal')">Cancel</button>
+      <button class="primary" onclick="savePortAssignment()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---- State ----
+let state = loadState();
+
+function defaultState() {
+  return {
+    vlans: [
+      { id: 1,   name: 'Default',    color: '#6c757d' },
+      { id: 10,  name: 'Management', color: '#0d6efd' },
+      { id: 20,  name: 'Data',       color: '#198754' },
+      { id: 30,  name: 'Voice',      color: '#ffc107' },
+      { id: 40,  name: 'Guest',      color: '#dc3545' },
+      { id: 99,  name: 'Native',     color: '#6f42c1' },
+    ],
+    switches: [],
+    nextSwitchId: 1,
+  };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem('vlanPortTracker');
+    if (raw) return JSON.parse(raw);
+  } catch(e) { console.warn('Failed to load state', e); }
+  return defaultState();
+}
+
+function saveState() {
+  localStorage.setItem('vlanPortTracker', JSON.stringify(state));
+}
+
+// ---- Toast ----
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// ---- Modals ----
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(ov => {
+  ov.addEventListener('click', e => {
+    if (e.target === ov) ov.classList.remove('open');
+  });
+});
+
+// ---- VLAN Management ----
+let editingVlanIndex = -1;
+
+function openAddVlanModal() {
+  editingVlanIndex = -1;
+  document.getElementById('vlanModalTitle').textContent = 'Add VLAN';
+  document.getElementById('vlanId').value = '';
+  document.getElementById('vlanName').value = '';
+  document.getElementById('vlanColor').value = randomColor();
+  document.getElementById('vlanId').disabled = false;
+  openModal('addVlanModal');
+}
+
+function openEditVlanModal(idx) {
+  editingVlanIndex = idx;
+  const v = state.vlans[idx];
+  document.getElementById('vlanModalTitle').textContent = 'Edit VLAN';
+  document.getElementById('vlanId').value = v.id;
+  document.getElementById('vlanName').value = v.name;
+  document.getElementById('vlanColor').value = v.color;
+  document.getElementById('vlanId').disabled = true;
+  openModal('addVlanModal');
+}
+
+function saveVlan() {
+  const id = parseInt(document.getElementById('vlanId').value);
+  const name = document.getElementById('vlanName').value.trim();
+  const color = document.getElementById('vlanColor').value;
+
+  if (!id || id < 1 || id > 4094) { toast('VLAN ID must be 1-4094'); return; }
+  if (!name) { toast('VLAN name is required'); return; }
+
+  if (editingVlanIndex >= 0) {
+    state.vlans[editingVlanIndex].name = name;
+    state.vlans[editingVlanIndex].color = color;
+  } else {
+    if (state.vlans.find(v => v.id === id)) { toast('VLAN ID already exists'); return; }
+    state.vlans.push({ id, name, color });
+    state.vlans.sort((a, b) => a.id - b.id);
+  }
+
+  saveState();
+  render();
+  closeModal('addVlanModal');
+  toast(editingVlanIndex >= 0 ? 'VLAN updated' : 'VLAN added');
+}
+
+function removeVlan(idx) {
+  const v = state.vlans[idx];
+  if (!confirm(`Remove VLAN ${v.id} (${v.name})? Ports using it will become unassigned.`)) return;
+
+  // Unassign ports that used this VLAN
+  state.switches.forEach(sw => {
+    sw.ports.forEach(p => {
+      if (p.vlanId === v.id) { p.vlanId = null; p.note = ''; }
+    });
+  });
+
+  state.vlans.splice(idx, 1);
+  saveState();
+  render();
+  toast('VLAN removed');
+}
+
+function randomColor() {
+  const hue = Math.floor(Math.random() * 360);
+  return `hsl(${hue}, 70%, 50%)`.replace(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/, (_, h, s, l) => {
+    return hslToHex(+h, +s, +l);
+  });
+}
+
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  return '#' + [f(0), f(8), f(4)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+}
+
+// ---- Switch Management ----
+function openAddSwitchModal() {
+  document.getElementById('switchName').value = '';
+  openModal('addSwitchModal');
+}
+
+function addSwitch() {
+  const name = document.getElementById('switchName').value.trim() || `Switch-${state.nextSwitchId}`;
+  const portCount = parseInt(document.getElementById('switchPortCount').value);
+
+  const ports = [];
+  for (let i = 1; i <= portCount; i++) {
+    ports.push({ number: i, vlanId: null, note: '' });
+  }
+
+  state.switches.push({ id: state.nextSwitchId++, name, portCount, ports });
+  saveState();
+  render();
+  closeModal('addSwitchModal');
+  toast(`Switch "${name}" added`);
+}
+
+function removeSwitch(switchId) {
+  const sw = state.switches.find(s => s.id === switchId);
+  if (!confirm(`Delete switch "${sw.name}"?`)) return;
+  state.switches = state.switches.filter(s => s.id !== switchId);
+  saveState();
+  render();
+  toast('Switch removed');
+}
+
+function renameSwitchFromInput(switchId, newName) {
+  const sw = state.switches.find(s => s.id === switchId);
+  if (sw) {
+    sw.name = newName.trim() || sw.name;
+    saveState();
+  }
+}
+
+// ---- Port Assignment ----
+let currentAssignSwitch = null;
+let currentAssignPort = null;
+let selectedVlanIdForAssign = undefined; // undefined = no change, null = unassign
+
+function openAssignModal(switchId, portNum) {
+  currentAssignSwitch = switchId;
+  currentAssignPort = portNum;
+
+  const sw = state.switches.find(s => s.id === switchId);
+  const port = sw.ports.find(p => p.number === portNum);
+
+  document.getElementById('assignTitle').textContent = `${sw.name} - Port ${portNum}`;
+  document.getElementById('portNote').value = port.note || '';
+
+  selectedVlanIdForAssign = port.vlanId;
+
+  renderVlanPicker();
+  openModal('assignVlanModal');
+}
+
+function renderVlanPicker() {
+  const picker = document.getElementById('vlanPicker');
+  let html = `<div class="vlan-pick-option ${selectedVlanIdForAssign === null ? 'selected' : ''}"
+    style="background:var(--unassigned);color:var(--text-muted);"
+    onclick="pickVlan(null)">Unassigned</div>`;
+
+  state.vlans.forEach(v => {
+    const sel = selectedVlanIdForAssign === v.id ? 'selected' : '';
+    const textCol = getContrastColor(v.color);
+    html += `<div class="vlan-pick-option ${sel}"
+      style="background:${v.color};color:${textCol};"
+      onclick="pickVlan(${v.id})">VLAN ${v.id} - ${esc(v.name)}</div>`;
+  });
+
+  picker.innerHTML = html;
+}
+
+function pickVlan(vlanId) {
+  selectedVlanIdForAssign = vlanId;
+  renderVlanPicker();
+}
+
+function savePortAssignment() {
+  const sw = state.switches.find(s => s.id === currentAssignSwitch);
+  const port = sw.ports.find(p => p.number === currentAssignPort);
+  port.vlanId = selectedVlanIdForAssign;
+  port.note = document.getElementById('portNote').value.trim();
+  saveState();
+  render();
+  closeModal('assignVlanModal');
+}
+
+// ---- Bulk Operations ----
+let bulkMode = {};
+
+function toggleBulkMode(switchId) {
+  if (bulkMode[switchId]) {
+    delete bulkMode[switchId];
+  } else {
+    bulkMode[switchId] = { selected: new Set(), vlanId: null };
+  }
+  render();
+}
+
+function toggleBulkPort(switchId, portNum) {
+  const bm = bulkMode[switchId];
+  if (!bm) return;
+  if (bm.selected.has(portNum)) bm.selected.delete(portNum);
+  else bm.selected.add(portNum);
+  render();
+}
+
+function bulkSelectAll(switchId) {
+  const sw = state.switches.find(s => s.id === switchId);
+  const bm = bulkMode[switchId];
+  if (!bm) return;
+  sw.ports.forEach(p => bm.selected.add(p.number));
+  render();
+}
+
+function bulkDeselectAll(switchId) {
+  const bm = bulkMode[switchId];
+  if (!bm) return;
+  bm.selected.clear();
+  render();
+}
+
+function bulkApply(switchId) {
+  const bm = bulkMode[switchId];
+  if (!bm || bm.selected.size === 0) { toast('Select ports first'); return; }
+
+  const vlanSelect = document.getElementById(`bulkVlan-${switchId}`);
+  const vlanId = vlanSelect.value === 'null' ? null : parseInt(vlanSelect.value);
+
+  const sw = state.switches.find(s => s.id === switchId);
+  sw.ports.forEach(p => {
+    if (bm.selected.has(p.number)) p.vlanId = vlanId;
+  });
+
+  saveState();
+  toast(`${bm.selected.size} ports updated`);
+  delete bulkMode[switchId];
+  render();
+}
+
+// ---- Export / Import ----
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `vlan-tracker-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Data exported');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!imported.vlans || !imported.switches) throw new Error('Invalid format');
+      state = imported;
+      saveState();
+      render();
+      toast('Data imported successfully');
+    } catch (err) {
+      toast('Import failed: invalid file');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ---- Rendering ----
+function render() {
+  renderLegend();
+  renderSwitches();
+}
+
+function renderLegend() {
+  const el = document.getElementById('vlanLegend');
+  let html = '<h2>VLANs</h2><div class="vlan-chips">';
+  html += `<div class="vlan-chip unassigned-chip"><span class="swatch"></span>Unassigned</div>`;
+
+  state.vlans.forEach((v, idx) => {
+    const textCol = getContrastColor(v.color);
+    html += `<div class="vlan-chip" style="background:${v.color};color:${textCol};" ondblclick="openEditVlanModal(${idx})">
+      <span class="swatch" style="background:${textCol};opacity:0.3;"></span>
+      VLAN ${v.id} - ${esc(v.name)}
+      <span class="remove-vlan" onclick="event.stopPropagation();removeVlan(${idx})">&times;</span>
+    </div>`;
+  });
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderSwitches() {
+  const container = document.getElementById('switchContainer');
+
+  if (state.switches.length === 0) {
+    container.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--text-muted);">
+      <p style="font-size:1.1rem;margin-bottom:8px;">No switches added yet</p>
+      <p style="font-size:0.85rem;">Click <strong>+ Switch</strong> to add your first switch</p>
+    </div>`;
+    return;
+  }
+
+  let html = '';
+  state.switches.forEach(sw => {
+    const bm = bulkMode[sw.id];
+    const inBulk = !!bm;
+
+    html += `<div class="switch-card">
+      <div class="switch-header">
+        <h3>
+          <input type="text" class="switch-name-input" value="${esc(sw.name)}"
+            onchange="renameSwitchFromInput(${sw.id}, this.value)"
+            title="Click to rename">
+          <span class="port-count">${sw.portCount} ports</span>
+        </h3>
+        <div class="switch-header-actions">
+          <button onclick="toggleBulkMode(${sw.id})">${inBulk ? 'Cancel Bulk' : 'Bulk Assign'}</button>
+          <button class="danger" onclick="removeSwitch(${sw.id})">Delete</button>
+        </div>
+      </div>
+      <div class="switch-body">`;
+
+    // Bulk bar
+    if (inBulk) {
+      html += `<div class="bulk-bar active">
+        <span>${bm.selected.size} ports selected</span>
+        <button onclick="bulkSelectAll(${sw.id})">All</button>
+        <button onclick="bulkDeselectAll(${sw.id})">None</button>
+        <select id="bulkVlan-${sw.id}">
+          <option value="null">Unassigned</option>
+          ${state.vlans.map(v => `<option value="${v.id}">VLAN ${v.id} - ${esc(v.name)}</option>`).join('')}
+        </select>
+        <button class="primary" onclick="bulkApply(${sw.id})">Apply</button>
+      </div>`;
+    }
+
+    // Render ports in switch-panel style: top row = odd, bottom row = even
+    const oddPorts = sw.ports.filter(p => p.number % 2 === 1);
+    const evenPorts = sw.ports.filter(p => p.number % 2 === 0);
+
+    html += '<div class="port-grid">';
+    html += renderPortRow(sw, oddPorts, inBulk, bm);
+    html += renderPortRow(sw, evenPorts, inBulk, bm);
+    html += '</div>';
+
+    html += `</div></div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+function renderPortRow(sw, ports, inBulk, bm) {
+  let html = '<div class="port-row">';
+  ports.forEach(p => {
+    const vlan = state.vlans.find(v => v.id === p.vlanId);
+    const bg = vlan ? vlan.color : '';
+    const textCol = vlan ? getContrastColor(vlan.color) : '';
+    const cls = vlan ? '' : 'unassigned';
+    const style = vlan ? `background:${bg};color:${textCol};` : '';
+    const label = vlan ? `V${vlan.id}` : '';
+    const title = vlan ? `Port ${p.number}: VLAN ${vlan.id} (${vlan.name})${p.note ? ' - ' + p.note : ''}` : `Port ${p.number}: Unassigned${p.note ? ' - ' + p.note : ''}`;
+
+    const bulkSelected = bm && bm.selected.has(p.number);
+    const borderStyle = bulkSelected ? 'border-color:#fff;' : '';
+
+    const clickAction = inBulk
+      ? `toggleBulkPort(${sw.id},${p.number})`
+      : `openAssignModal(${sw.id},${p.number})`;
+
+    html += `<div class="port-block ${cls}" style="${style}${borderStyle}" title="${esc(title)}" onclick="${clickAction}">
+      <span class="port-number">${p.number}</span>
+      <span class="port-vlan-label">${label}</span>
+      ${p.note ? `<span style="position:absolute;top:1px;right:3px;font-size:0.55rem;opacity:0.7;">*</span>` : ''}
+    </div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+// ---- Helpers ----
+function esc(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function getContrastColor(hex) {
+  if (!hex) return '#e0e0e0';
+  hex = hex.replace('#', '');
+  if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? '#1a1a2e' : '#ffffff';
+}
+
+// ---- Init ----
+render();
+</script>
+
+</body>
+</html>
